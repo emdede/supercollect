@@ -1,12 +1,12 @@
 [tool.poetry]
 name = "supercollect"
-version = "1.0.0"
+version = "1.0.1"
 description = "Supercharge collectstatic for remote storages"
 authors = ["mdd <martin.diehl@terreon.de>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = ">=3.11"
 django = ">=4.2"
 
 [build-system]

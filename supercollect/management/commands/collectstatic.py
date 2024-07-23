@@ -44,12 +44,19 @@ class Command(collectstatic.Command):
                 else StaticFilesStorage(location=settings.STATIC_ROOT)
             )
 
-
+        is_dry_run = self.dry_run
+        
+        if is_dry_run and self.turbo:
+            self.dry_run = False
+        
         collected = super().collect()
 
         if not self.turbo:
             return collected
 
+        if is_dry_run:
+            self.dry_run = True
+        
         self.storage = staticfiles_storage
 
         modified_count = 0
@@ -61,7 +68,7 @@ class Command(collectstatic.Command):
             # Read old manifest
             try:
                 with temp_storage.open("staticfiles.json") as manifest:
-                    old_manifest = manifest.read().decode()
+                    old_manifest = manifest.read().decode()["paths"]
             except FileNotFoundError:
                 old_manifest = None
 
@@ -69,7 +76,7 @@ class Command(collectstatic.Command):
                 # Read new manifest
                 try:
                     with self.storage.open("staticfiles.json") as manifest:
-                        new_manifest = manifest.read().decode()
+                        new_manifest = manifest.read().decode()["paths"]
                 except FileNotFoundError:
                     new_manifest = None
 
@@ -79,8 +86,8 @@ class Command(collectstatic.Command):
                     old_manifest = json.loads(old_manifest)
 
                     def get_files_to_upload():
-                        for file_path in new_manifest["paths"]:
-                            if not file_path in old_manifest or old_manifest[file_path] != new_manifest[file_path]:
+                        for file_path in new_manifest:
+                            if file_path not in old_manifest or old_manifest[file_path] != new_manifest[file_path]:
                                 yield new_manifest[file_path]
                             else:
                                 unmodified_count += 1

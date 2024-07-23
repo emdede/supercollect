@@ -9,6 +9,7 @@ from django.contrib.staticfiles.storage import (
 )
 
 from supercollect.utils import get_all_files
+import json
 
 
 class Command(collectstatic.Command):
@@ -43,20 +44,68 @@ class Command(collectstatic.Command):
                 else StaticFilesStorage(location=settings.STATIC_ROOT)
             )
 
+
         collected = super().collect()
+
         if not self.turbo:
             return collected
 
         self.storage = staticfiles_storage
-        with ThreadPoolExecutor(max_workers=32) as executor:
-            for file in get_all_files(temp_storage):
-                executor.submit(self.upload, file, temp_storage)
 
-        return collected
+        modified_count = 0
+        unmodified_count = 0
+        
+        files_to_upload = get_all_files(temp_storage)
+
+        if manifest_deployment:
+            # Read old manifest
+            try:
+                with temp_storage.open("staticfiles.json") as manifest:
+                    old_manifest = manifest.read().decode()
+            except FileNotFoundError:
+                old_manifest = None
+
+            if old_manifest:
+                # Read new manifest
+                try:
+                    with self.storage.open("staticfiles.json") as manifest:
+                        new_manifest = manifest.read().decode()
+                except FileNotFoundError:
+                    new_manifest = None
+
+                if new_manifest:
+                    # Do diffing to determine which files to update
+                    new_manifest = json.loads(new_manifest)
+                    old_manifest = json.loads(old_manifest)
+
+                    def get_files_to_upload():
+                        for file_path in new_manifest["paths"]:
+                            if not file_path in old_manifest or old_manifest[file_path] != new_manifest[file_path]:
+                                yield new_manifest[file_path]
+                            else:
+                                unmodified_count += 1
+
+                    files_to_upload = get_files_to_upload()
+
+        with ThreadPoolExecutor(max_workers=32) as executor:
+            for file in files_to_upload:
+                if not self.dry_run:
+                    executor.submit(self.upload, file, temp_storage)
+                modified_count += 1
+
+        return collected if not self.turbo else {"modified": modified_count, "unmodified": unmodified_count}
 
     def handle(self, **options):
         report = super().handle(**options)
-        return "Super.collected()" if self.turbo else report
+
+        if not self.turbo:
+            # Vanilla Django Report
+            return report
+        
+        if self.dry_run:
+            return f"super().would_have_collected(modified={str(report["modified"])}, unmodified={str(report["unmodified"])})"
+        
+        return f"super().collected(modified={str(report["modified"])}, unmodified={str(report["unmodified"])})"
 
     def upload(self, path, source_storage):
         with source_storage.open(path) as source_file:

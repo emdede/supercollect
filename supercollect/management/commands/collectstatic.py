@@ -93,7 +93,7 @@ class Command(collectstatic.Command):
                     executor.submit(self.upload, file, temp_storage)
                 modified_count += 1
 
-        return collected if not self.turbo else {"modified": modified_count, "unmodified": unmodified_count}
+        return {"modified": modified_count, "unmodified": unmodified_count}
 
     def handle(self, **options):
         report = super().handle(**options)
@@ -103,9 +103,9 @@ class Command(collectstatic.Command):
             return report
         
         if self.dry_run:
-            return f"super().would_have_collected(modified={str(report["modified"])}, unmodified={str(report["unmodified"])})"
+            return f"super().would_have_collected(modified={str(report['modified'])}, unmodified={str(report['unmodified'])})"
         
-        return f"super().collected(modified={str(report["modified"])}, unmodified={str(report["unmodified"])})"
+        return f"super().collected(modified={str(report['modified'])}, unmodified={str(report['unmodified'])})"
 
     def upload(self, path, source_storage):
         with source_storage.open(path) as source_file:

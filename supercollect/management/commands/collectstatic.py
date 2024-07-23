@@ -49,18 +49,17 @@ class Command(collectstatic.Command):
         if is_dry_run and self.turbo:
             self.dry_run = False
         
-        collected = super().collect()
+        report = super().collect()
 
         if not self.turbo:
-            return collected
+            return report
 
         if is_dry_run:
             self.dry_run = True
         
         self.storage = staticfiles_storage
 
-        modified_count = 0
-        unmodified_count = 0
+        report = {"modified": 0, "unmodified": 0}
         
         files_to_upload = get_all_files(temp_storage)
 
@@ -85,22 +84,24 @@ class Command(collectstatic.Command):
                     new_manifest = json.loads(new_manifest)["paths"]
                     old_manifest = json.loads(old_manifest)["paths"]
 
-                    def get_files_to_upload():
+                    def get_files_to_upload(report):
                         for file_path in new_manifest:
                             if file_path not in old_manifest or old_manifest[file_path] != new_manifest[file_path]:
                                 yield new_manifest[file_path]
                             else:
-                                unmodified_count += 1
+                                report["unmodified"] += 1
+                        
+                        yield "staticfiles.json"
 
-                    files_to_upload = get_files_to_upload()
+                    files_to_upload = get_files_to_upload(report)
 
         with ThreadPoolExecutor(max_workers=32) as executor:
             for file in files_to_upload:
                 if not self.dry_run:
                     executor.submit(self.upload, file, temp_storage)
-                modified_count += 1
+                report["modified"] += 1
 
-        return {"modified": modified_count, "unmodified": unmodified_count}
+        return report
 
     def handle(self, **options):
         report = super().handle(**options)

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "supercollect"
-version = "1.0.54"
+version = "1.0.55"
 description = "Supercharge collectstatic for remote storages"
 authors = ["mdd <martin.diehl@terreon.de>"]
 readme = "README.md"

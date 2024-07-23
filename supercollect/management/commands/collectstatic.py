@@ -18,6 +18,7 @@ class Command(collectstatic.Command):
     Then, files are uploaded.
     This significantly speeds up the process for remote locations.
     """
+    turbo_report = {"modified": 0, "unmodified": 0}
 
     def add_arguments(self, parser):
         super().add_arguments(parser)
@@ -59,8 +60,6 @@ class Command(collectstatic.Command):
         
         self.storage = staticfiles_storage
 
-        report = {"modified": 0, "unmodified": 0}
-        
         files_to_upload = get_all_files(temp_storage)
 
         if manifest_deployment:
@@ -84,22 +83,22 @@ class Command(collectstatic.Command):
                     new_manifest = json.loads(new_manifest)["paths"]
                     old_manifest = json.loads(old_manifest)["paths"]
 
-                    def get_files_to_upload(report):
+                    def get_files_to_upload():
                         for file_path in new_manifest:
                             if file_path not in old_manifest or old_manifest[file_path] != new_manifest[file_path]:
                                 yield new_manifest[file_path]
                             else:
-                                report["unmodified"] += 1
+                                self.turbo_report["unmodified"] += 1
                         
                         yield "staticfiles.json"
 
-                    files_to_upload = get_files_to_upload(report)
+                    files_to_upload = get_files_to_upload()
 
         with ThreadPoolExecutor(max_workers=32) as executor:
             for file in files_to_upload:
                 if not self.dry_run:
                     executor.submit(self.upload, file, temp_storage)
-                report["modified"] += 1
+                self.turbo_report["modified"] += 1
 
         return report
 
@@ -110,6 +109,8 @@ class Command(collectstatic.Command):
             # Vanilla Django Report
             return report
         
+        report = self.turbo_report
+
         if self.dry_run:
             return f"super().would_have_collected(modified={str(report['modified'])}, unmodified={str(report['unmodified'])})"
         

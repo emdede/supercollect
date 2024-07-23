@@ -45,7 +45,7 @@ class Command(collectstatic.Command):
             )
 
         is_dry_run = self.dry_run
-        
+
         if is_dry_run and self.turbo:
             self.dry_run = False
         
@@ -68,7 +68,7 @@ class Command(collectstatic.Command):
             # Read old manifest
             try:
                 with temp_storage.open("staticfiles.json") as manifest:
-                    old_manifest = manifest.read().decode()["paths"]
+                    old_manifest = manifest.read().decode()
             except FileNotFoundError:
                 old_manifest = None
 
@@ -76,14 +76,14 @@ class Command(collectstatic.Command):
                 # Read new manifest
                 try:
                     with self.storage.open("staticfiles.json") as manifest:
-                        new_manifest = manifest.read().decode()["paths"]
+                        new_manifest = manifest.read().decode()
                 except FileNotFoundError:
                     new_manifest = None
 
                 if new_manifest:
                     # Do diffing to determine which files to update
-                    new_manifest = json.loads(new_manifest)
-                    old_manifest = json.loads(old_manifest)
+                    new_manifest = json.loads(new_manifest)["paths"]
+                    old_manifest = json.loads(old_manifest)["paths"]
 
                     def get_files_to_upload():
                         for file_path in new_manifest:

@@ -27,10 +27,16 @@ class Command(collectstatic.Command):
             action="store_true",
             help="Use turbo mode.",
         )
+        parser.add_argument(
+            "--nodiff",
+            action="store_true",
+            help="Skip manifest diffing.",
+        )
 
     def set_options(self, **options):
         super().set_options(**options)
         self.turbo = options["turbo"]
+        self.manifest_diffing_enabled = not options["nodiff"]
 
     def collect(self):
         manifest_deployment, temp_storage = False, None
@@ -60,9 +66,9 @@ class Command(collectstatic.Command):
         
         self.storage = staticfiles_storage
 
-        files_to_upload = get_all_files(temp_storage)
+        get_files_to_upload = lambda: get_all_files(temp_storage)
 
-        if manifest_deployment:
+        if manifest_deployment and self.manifest_diffing_enabled:
             # Read old manifest
             try:
                 with temp_storage.open("staticfiles.json") as manifest:
@@ -83,7 +89,7 @@ class Command(collectstatic.Command):
                     new_manifest = json.loads(new_manifest)["paths"]
                     old_manifest = json.loads(old_manifest)["paths"]
 
-                    def get_files_to_upload():
+                    def get_changed_files():
                         for file_path in new_manifest:
                             if file_path not in old_manifest or old_manifest[file_path] != new_manifest[file_path]:
                                 yield new_manifest[file_path]
@@ -92,10 +98,10 @@ class Command(collectstatic.Command):
                         
                         yield "staticfiles.json"
 
-                    files_to_upload = get_files_to_upload()
+                    get_files_to_upload = lambda: get_changed_files()
 
-        with ThreadPoolExecutor(max_workers=32) as executor:
-            for file in files_to_upload:
+        with ThreadPoolExecutor() as executor:
+            for file in get_files_to_upload():
                 if not self.dry_run:
                     executor.submit(self.upload, file, temp_storage)
                 self.turbo_report["modified"] += 1

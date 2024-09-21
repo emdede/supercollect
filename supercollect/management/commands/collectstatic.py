@@ -38,6 +38,15 @@ class Command(collectstatic.Command):
         self.turbo = options["turbo"]
         self.manifest_diffing_enabled = not options["nodiff"]
 
+    
+    def get_files(self, storage):
+        for filepath in get_all_files(storage):
+            # Skip source files to minimize uploaded objects w/ manifest deployments
+            if self.manifest_contents and filepath in self.manifest_contents:
+                continue
+            yield filepath
+
+
     def collect(self):
         manifest_deployment, temp_storage = False, None
 
@@ -61,44 +70,44 @@ class Command(collectstatic.Command):
         if not self.turbo:
             return report
 
+        if manifest_deployment:
+            try:
+                with temp_storage.open("staticfiles.json") as manifest:
+                    manifest_file = manifest.read().decode()
+                    self.manifest_contents = json.loads(manifest_file)["paths"]
+            except FileNotFoundError:
+                self.manifest_contents = None
+        else:
+            self.manifest_contents = None
+
         if is_dry_run:
             self.dry_run = True
-        
-        self.storage = staticfiles_storage
 
-        get_files_to_upload = lambda: get_all_files(temp_storage)
+        self.storage = staticfiles_storage
+        get_files_to_upload = lambda: self.get_files(temp_storage)
 
         if manifest_deployment and self.manifest_diffing_enabled:
             # Read old manifest
             try:
-                with temp_storage.open("staticfiles.json") as manifest:
+                with self.storage.open("staticfiles.json") as manifest:
                     old_manifest = manifest.read().decode()
             except FileNotFoundError:
                 old_manifest = None
 
-            if old_manifest:
-                # Read new manifest
-                try:
-                    with self.storage.open("staticfiles.json") as manifest:
-                        new_manifest = manifest.read().decode()
-                except FileNotFoundError:
-                    new_manifest = None
+            if old_manifest and self.manifest_contents:
+                # Do diffing to determine which files to update
+                old_manifest_contents = json.loads(old_manifest)["paths"]
 
-                if new_manifest:
-                    # Do diffing to determine which files to update
-                    new_manifest = json.loads(new_manifest)["paths"]
-                    old_manifest = json.loads(old_manifest)["paths"]
+                def get_changed_files():
+                    for file_path in self.manifest_contents:
+                        if file_path not in old_manifest_contents or old_manifest_contents[file_path] != self.manifest_contents[file_path]:
+                            yield self.manifest_contents[file_path]
+                        else:
+                            self.turbo_report["unmodified"] += 1
+                    
+                    yield "staticfiles.json"
 
-                    def get_changed_files():
-                        for file_path in new_manifest:
-                            if file_path not in old_manifest or old_manifest[file_path] != new_manifest[file_path]:
-                                yield new_manifest[file_path]
-                            else:
-                                self.turbo_report["unmodified"] += 1
-                        
-                        yield "staticfiles.json"
-
-                    get_files_to_upload = lambda: get_changed_files()
+                get_files_to_upload = lambda: get_changed_files()
 
         with ThreadPoolExecutor() as executor:
             for file in get_files_to_upload():

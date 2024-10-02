@@ -38,14 +38,6 @@ class Command(collectstatic.Command):
         self.turbo = options["turbo"]
         self.manifest_diffing_enabled = not options["nodiff"]
 
-    
-    def get_files(self, storage):
-        for filepath in get_all_files(storage):
-            # Skip source files to minimize uploaded objects w/ manifest deployments
-            if self.manifest_contents and filepath in self.manifest_contents:
-                continue
-            yield filepath
-
 
     def collect(self):
         manifest_deployment, temp_storage = False, None
@@ -84,7 +76,7 @@ class Command(collectstatic.Command):
             self.dry_run = True
 
         self.storage = staticfiles_storage
-        get_files_to_upload = lambda: self.get_files(temp_storage)
+        get_files_to_upload = lambda: get_all_files(temp_storage)
 
         if manifest_deployment and self.manifest_diffing_enabled:
             # Read old manifest
@@ -102,6 +94,7 @@ class Command(collectstatic.Command):
                     for file_path in self.manifest_contents:
                         if file_path not in old_manifest_contents or old_manifest_contents[file_path] != self.manifest_contents[file_path]:
                             yield self.manifest_contents[file_path]
+                            yield file_path
                         else:
                             self.turbo_report["unmodified"] += 1
                     
